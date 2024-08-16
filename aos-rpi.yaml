@@ -1,0 +1,479 @@
+desc: "Raspberry 5 with xen dom0less"
+min_ver: "0.24"
+
+variables:
+  # Aos unit configuration
+  UNIT_MODEL: "rpi-dynamic"
+  UNIT_VERSION: "1.0"
+
+  BUNDLE_IMAGE_VERSION: "4.3.2"
+  ROOTFS_REF_VERSION: "4.3.1"
+
+  # Aos node configuration
+  MAIN_NODE_HOSTNAME: "main"
+
+  # Network configuration
+  MAIN_NODE_IP: "10.0.0.1"
+
+  # Build configuration
+  YOCTOS_WORK_DIR: "yocto"
+  DOM0_OS: "zephyr"
+
+  # Raspberry 5 build configuration
+  ZEPHYR_DOM0_TARGET: "aos_core_zephyr"
+
+  DOMD_BUILD_DIR: "build-domd"
+  DOM0_BUILD_DIR: "zephyr/build-dom0"
+
+  XT_XEN_DTBO_NAME: "%{SOC_FAMILY}-%{MACHINE}-xen.dtbo"
+  XT_DOMD_DTB_NAME: "%{SOC_FAMILY}-%{MACHINE}-domd.dtb"
+  XT_XEN_DTB_NAME: "%{SOC_FAMILY}-%{MACHINE}-xen.dtb"
+
+  # Addresses for u-boot
+  DOMD_IMG_ADDR: "0x1600000"
+  DOMD_DTB_ADDR: "0xb000000"
+  XEN_IMG_ADDR: "0xb100000"
+  XEN_DTBO_ADDR: "0xb300000"
+  XENPOLICY_IMG_ADDR: "0xb400000"
+
+  # Aos config
+  AOS_MAIN_NODE_ID: "main-domd"
+
+  AOS_DOM0_NODE_TYPE: "rpi-main-dom0"
+
+  AOS_DOMD_NODE_ID: "main-domd"
+  AOS_DOMD_NODE_TYPE: "rpi-main-domd"
+
+  AOS_BUNDLE_IMAGE_VERSION: "2.2.3"
+  AOS_ROOTFS_REF_VERSION: "2.2.2"
+
+  AOS_BASE_IMAGE: "aos-image-rpi"
+
+common_data:
+  common_yocto_sources: &COMMON_YOCTO_SOURCES
+    - type: git
+      url: "https://git.yoctoproject.org/poky"
+      rev: "6879650b927c96a2464224cdc2bed8245511cbf1"
+
+    - type: git
+      url: "https://git.openembedded.org/meta-openembedded"
+      rev: "80e01188fa822d87d301ee71973c462d7a865493"
+
+    - type: git
+      url: "https://github.com/xen-troops/meta-xt-common.git"
+      rev: "09d7a4c5fd4ebff2f78129f6798af1f4d699b26d"
+
+    - type: git
+      url: "https://git.yoctoproject.org/meta-virtualization"
+      rev: "6a80f140e387621f62964209a2e07d3bcfb125ce"
+
+    - type: git
+      url: "git://git.yoctoproject.org/meta-security"
+      rev: "scarthgap"
+
+    - type: git
+      url: "https://git.yoctoproject.org/meta-selinux"
+      rev: "9f5a46620a07d7b15722593a33e46a4d19392b75"
+    
+    - type: git
+      url: "https://github.com/aosedge/meta-aos"
+      rev: "feature_dynamic_nodes"
+
+    - type: git
+      url: "https://github.com/mlohvynenko/meta-aos-rpi.git"
+      rev: "feature_add_recipes"
+
+
+  # Common configuration options for all yocto-based domains
+  common_conf: &COMMON_CONF
+    - [SSTATE_DIR, "${TOPDIR}/../../../common_data/sstate"]
+    - [DL_DIR, "${TOPDIR}/../../../common_data/downloads"]
+
+    - [MACHINE, "%{MACHINE}"]
+    - [SOC_FAMILY, "%{SOC_FAMILY}"]
+    - [RPI_SOC_FAMILY, "%{SOC_FAMILY}"]
+
+    # Init manager
+    - [INIT_MANAGER, "systemd"]
+
+    # Use hypervisor console on all guests
+    - [SERIAL_CONSOLES, "115200;hvc0"]
+
+    # Skip warning about missing "virtualization" distro feature
+    - [SKIP_META_VIRT_SANITY_CHECK, "1"]
+
+    # Do not install kernel image to rootfs to decrease initrd size
+    - ["RDEPENDS_${KERNEL_PACKAGE_NAME}-base", ""]
+
+    # Make logs persistent
+    - [VOLATILE_LOG_DIR, "no"]
+
+    # Generate ext4 image files
+    - [IMAGE_FSTYPES:append, " ext4"]
+
+    # Initramfs configuration
+    - [INITRAMFS_IMAGE, "aos-image-initramfs"]
+    - [INITRAMFS_IMAGE_BUNDLE, "1"]
+    - [INITRAMFS_FSTYPES, "cpio.gz"]
+
+    # Preferred providers
+
+    # refpolicy
+    - [PREFERRED_PROVIDER_virtual/refpolicy, "refpolicy-aos"]
+
+    # Distro features
+
+    # Remove features that we are not using
+    - [
+        DISTRO_FEATURES:remove,
+        "x11 gtk gobject-introspection-data wifi nfc
+        bluetooth irda zeroconf 3g sysvinit acl alsa argp pcmcia usbgadget
+        usbhost opengl ptest multiarch wayland vulkan sysvinit pulseaudio",
+      ]
+    # Remove ptest to reduce the build time
+    - [DISTRO_FEATURES:remove, "ptest"]
+
+    # Enable SELinux
+    # - [DISTRO_FEATURES:append, " acl xattr pam selinux"]
+
+    - [FIRST_BOOT_RELABEL, "1"]
+
+    # Machine features
+
+    # Add Capacity Aware migration Strategy (CAS)
+    - [MACHINE_FEATURES:append, " cas"]
+
+    # SDK features
+
+    # add the static lib to SDK toolchain
+    - [SDKIMAGE_FEATURES:append, " staticdev-pkgs"]
+
+      # Unit model
+    - [AOS_UNIT_MODEL, "%{UNIT_MODEL}"]
+    - [AOS_UNIT_VERSION, "%{UNIT_VERSION}"]
+
+    # Image versions
+    - [AOS_ROOTFS_IMAGE_VERSION, "%{BUNDLE_IMAGE_VERSION}"]
+    - [AOS_BOOT_IMAGE_VERSION, "%{BUNDLE_IMAGE_VERSION}"]
+
+    # Node configuration
+    - [AOS_MAIN_NODE_HOSTNAME, "%{MAIN_NODE_HOSTNAME}"]
+    - [AOS_HOSTS, "%{MAIN_NODE_IP}=wwwivi"]
+    - [AOS_NODE_TYPE, "%{UNIT_MODEL}-%{UNIT_VERSION}-%{NODE_TYPE}"]
+
+    # Addresses for u-boot
+    - [DOMD_IMG_ADDR, "%{DOMD_IMG_ADDR}"]
+    - [DOMD_DTB_ADDR, "%{DOMD_DTB_ADDR}"]
+    - [XEN_IMG_ADDR, "%{XEN_IMG_ADDR}"]
+    - [XEN_DTBO_ADDR, "%{XEN_DTBO_ADDR}"]
+    - [XENPOLICY_IMG_ADDR, "%{XENPOLICY_IMG_ADDR}"]
+
+components:
+  dom0:
+    default: true
+    build-dir: "%{DOM0_BUILD_DIR}"
+    sources:
+      - type: west
+        url: "https://github.com/mlohvynenko/aos_core_zephyr"
+        rev: "feature_add_rpi5_board"
+
+    builder:
+      type: zephyr
+      board: "%{ZEPHYR_DOM0_MACHINE}"
+      target: "%{ZEPHYR_DOM0_TARGET}"
+      work_dir: build
+      vars:
+        - 'CONFIG_AOS_NODE_TYPE="%{AOS_DOM0_NODE_TYPE}"'
+        - 'CONFIG_TA_DEPLOY_DIR="../../../%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/aos/ta"'
+        - 'CONFIG_AOS_ROOT_CA_PATH="../../../%{YOCTOS_WORK_DIR}/meta-aos/recipes-aos/aos-rootca/files/Aos_Root_CA.pem"'
+      target_images:
+        - "build/zephyr/zephyr.bin"
+      additional_deps:
+        - "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/u-boot-domd.bin"
+        - "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{XT_DOMD_DTB_NAME}"
+
+  domd:
+    default: true
+    build-dir: "%{YOCTOS_WORK_DIR}"
+    sources:
+      - *COMMON_YOCTO_SOURCES
+      - type: git
+        url: "https://git.yoctoproject.org/meta-raspberrypi"
+        rev: "1918a27419dcd5e79954c0dc0edddcde91057a7e"
+
+      - type: git
+        url: "https://github.com/xen-troops/meta-xt-rpi5.git"
+        rev: "v0.2"
+
+    builder:
+      type: yocto
+      work_dir: "%{DOMD_BUILD_DIR}"
+      conf:
+        - *COMMON_CONF
+        - [XT_DOM_NAME, "domd"]
+        - [XT_DEVICE_TREES, "%{XT_XEN_DTBO_NAME}"]
+        - [DOM0_OS, "%{DOM0_OS}"]
+        - [PREFERRED_VERSION_xen,"4.19.0+git"]
+        - [PREFERRED_VERSION_xen-tools, "4.19.0+git"]
+        - [PREFERRED_VERSION_u-boot, "2024.04"]
+
+        # RPI specific
+        - [ENABLE_UART, "1"]
+        - [RPI_USE_U_BOOT, "1"]
+        - [PREFERRED_PROVIDER_u-boot-default-script, "xt-rpi-u-boot-scr"]
+        - [UART_BOORLOADER, "1"]
+        - [KERNEL_IMAGETYPE_UBOOT, "Image"]
+        - [DISTRO_FEATURES:append, " xen"]
+        - [DOMD_BOOTARGS, "console=ttyAMA0 earlycon=xen earlyprintk=xen clk_ignore_unused root=%{DOMD_ROOTFS_DEV} rootfstype=ext4 rootwait quiet
+                         ro rootwait pci=pcie_bus_perf
+                         cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1 cgroup_enable=memory
+                         vardir.disk=%{VAR_DISK}
+                         opendisk.target=%{OPEN_DISK}
+                         opendisk.pkcs11=optee
+                         aosupdate.disk=\\\\/dev\\\\/aosvg\\\\/workdirs
+                         aosupdate.path=um\\\\/update_rootfs
+                         aosupdate.selinux_module=\\\\/usr\\\\/share\\\\/selinux\\\\/aos\\\\/base.pp"]
+
+        # Requires to properly generate Aos FOTA
+        - [IMAGE_BASENAME, "%{AOS_BASE_IMAGE}"]
+
+        - [
+            AOS_UM_COMPONENT_PREFIX,
+            "%{UNIT_MODEL}-%{UNIT_VERSION}-%{NODE_TYPE}-",
+          ]
+
+      build_target: "%{AOS_BASE_IMAGE}"
+      layers:
+        - "../meta-virtualization"
+        - "../meta-openembedded/meta-oe"
+        - "../meta-openembedded/meta-networking"
+        - "../meta-openembedded/meta-perl"
+        - "../meta-openembedded/meta-python"
+        - "../meta-openembedded/meta-filesystems"
+        - "../meta-security"
+        - "../meta-selinux"
+        - "../meta-aos"
+        - "../meta-xt-common/meta-xt-domx"
+        - "../meta-xt-common/meta-xt-driver-domain"
+        - "../meta-xt-common/meta-xt-security"
+
+        - "../meta-raspberrypi"
+        - "../meta-xt-rpi5"
+        - "../meta-aos-rpi/meta-aos-rpi-domd"
+
+      target_images:
+        - "tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}"
+        - "tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTBO_NAME}"
+        - "tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-mmc.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-usb.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-pcie1.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/mmc-passthrough.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/usb-passthrough.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/pcie1-passthrough.dtbo"
+        - "tmp/deploy/images/%{MACHINE}/bcm2712-rpi-5-b.dtb"
+        - "tmp/deploy/images/%{MACHINE}/Image.gz"
+        - "tmp/deploy/images/%{MACHINE}/armstub8-2712.bin"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/bootcode.bin"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/config.txt"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/cmdline.txt"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup_cd.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup_db.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup_x.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup4.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup4cd.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup4db.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/fixup4x.dat"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start_cd.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start_db.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start_x.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start4.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start4db.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start4cd.elf"
+        - "tmp/deploy/images/%{MACHINE}/bootfiles/start4x.elf"
+
+        # from aos rcar meta
+        - "tmp/deploy/images/%{MACHINE}/Image-%{MACHINE}.bin"
+        - "tmp/deploy/images/%{MACHINE}/Image.gz-initramfs-%{MACHINE}.bin"
+        - "tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}.uImage"
+        - "tmp/deploy/images/%{MACHINE}/xenpolicy-%{MACHINE}"
+        - "tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTB_NAME}"
+        - "tmp/deploy/images/%{MACHINE}/aos-image-initramfs-%{MACHINE}.cpio.gz"
+        - "tmp/deploy/images/%{MACHINE}/%{AOS_BASE_IMAGE}-%{MACHINE}.ext4"
+        - "tmp/deploy/images/%{MACHINE}/%{AOS_BASE_IMAGE}-%{MACHINE}-var.ext4"
+        - "tmp/deploy/images/%{MACHINE}/aos/boot/version"
+        - "tmp/deploy/images/%{MACHINE}/boot.uImage"
+        - "tmp/deploy/images/%{MACHINE}/u-boot-domd.bin"
+        - "tmp/deploy/images/%{MACHINE}/%{XT_DOMD_DTB_NAME}"
+        # firmware
+        - "tmp/deploy/images/%{MACHINE}/bl31-%{MACHINE}.bin"
+        - "tmp/deploy/images/%{MACHINE}/bl31-%{MACHINE}.srec"
+        - "tmp/deploy/images/%{MACHINE}/tee-%{MACHINE}.bin"
+        - "tmp/deploy/images/%{MACHINE}/tee-%{MACHINE}.srec"
+        - "tmp/deploy/images/%{MACHINE}/u-boot-elf-%{MACHINE}.srec"
+        - "tmp/deploy/images/%{MACHINE}/u-boot-%{MACHINE}.bin"
+
+images:
+  dom0:
+    type: gpt
+    desc: "Full RPI image"
+    sector_size: 512
+    partitions:
+      boot:
+        gpt_type: ebd0a0a2-b9e5-4433-87c0-68b6b72699c7
+        type: vfat
+        size: 512 MiB
+        items:
+          "armstub8-2712.bin": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/armstub8-2712.bin"
+          "bootcode.bin": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/bootcode.bin"
+          "config.txt":   "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/config.txt"
+          "cmdline.txt":  "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/cmdline.txt"
+          "fixup.dat":    "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup.dat"
+          "fixup_cd.dat": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup_cd.dat"
+          "fixup_db.dat": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup_db.dat"
+          "fixup_x.dat":  "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup_x.dat"
+          "fixup4.dat":   "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup4.dat"
+          "fixup4cd.dat": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup4cd.dat"
+          "fixup4db.dat": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup4db.dat"
+          "fixup4x.dat":  "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/fixup4x.dat"
+          "start.elf":    "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start.elf"
+          "start_cd.elf": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start_cd.elf"
+          "start_db.elf": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start_db.elf"
+          "start_x.elf":  "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start_x.elf"
+          "start4.elf":   "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start4.elf"
+          "start4db.elf": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start4db.elf"
+          "start4cd.elf": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start4cd.elf"
+          "start4x.elf":  "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bootfiles/start4x.elf"
+          # "Image.gz": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/Image.gz"
+          "Image.gz": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/Image.gz-initramfs-%{MACHINE}.bin"
+          "xen": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}"
+          "xenpolicy": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/xenpolicy-%{MACHINE}"
+          "u-boot": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/u-boot-%{MACHINE}.bin"
+          "boot.scr": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/boot.scr"
+          "%{XT_XEN_DTBO_NAME}": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{XT_XEN_DTBO_NAME}"
+          "%{XT_DOMD_DTB_NAME}": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{XT_DOMD_DTB_NAME}"
+          "bcm2712-rpi-5-b.dtb": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/bcm2712-rpi-5-b.dtb"
+          "mmc-passthrough.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/mmc-passthrough.dtbo"
+          "usb-passthrough.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/usb-passthrough.dtbo"
+          "pcie1-passthrough.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/pcie1-passthrough.dtbo"
+          "%{SOC_FAMILY}-%{MACHINE}-usb.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-usb.dtbo"
+          "%{SOC_FAMILY}-%{MACHINE}-mmc.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-mmc.dtbo"
+          "%{SOC_FAMILY}-%{MACHINE}-pcie1.dtbo": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{SOC_FAMILY}-%{MACHINE}-pcie1.dtbo"
+          "zephyr.bin": "%{DOM0_BUILD_DIR}/build/zephyr/zephyr.bin"
+
+
+          # "xen": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/xen-%{MACHINE}.uImage"
+          "linux-domd": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/Image-%{MACHINE}.bin"
+          "initramfs-domd": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/aos-image-initramfs-%{MACHINE}.cpio.gz"
+          "aos/version": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/aos/boot/version"
+      dom0:
+        gpt_type: ebd0a0a2-b9e5-4433-87c0-68b6b72699c7
+        type: vfat
+        size: 512 MiB
+        items:
+          "aos": "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/aos"
+
+  domd:
+    type: gpt
+    desc: "Full RPI image"
+    sector_size: 512
+    partitions:
+      domd_rootfs:
+        gpt_type: B921B045-1DF0-41C3-AF44-4C6F280D3FAE # Linux aarch64 root
+        type: raw_image
+        size: 8 GiB
+        image_path: "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{AOS_BASE_IMAGE}-%{MACHINE}.rootfs.ext4"
+
+      domd_var:
+        gpt_type: B921B045-1DF0-41C3-AF44-4C6F280D3FAE # Linux aarch64 root
+        type: raw_image
+        image_path: "%{YOCTOS_WORK_DIR}/%{DOMD_BUILD_DIR}/tmp/deploy/images/%{MACHINE}/%{AOS_BASE_IMAGE}-%{MACHINE}-var.ext4"
+
+      domd_aos:
+        gpt_type: CA7D7CCB-63ED-4C53-861C-1742536059CC # LUKS partition
+        type: empty
+        size: 4096 MiB
+
+parameters:
+  # Aos VIS data provider
+  VIS_DATA_PROVIDER:
+    desc: "Specifies plugin for VIS automotive data"
+    renesassimulator:
+      default: true
+      overrides:
+        variables:
+          VIS_DATA_PROVIDER: "renesassimulatoradapter"
+
+    telemetryemulator:
+      overrides:
+        variables:
+          VIS_DATA_PROVIDER: "telemetryemulatoradapter"
+
+  NODE_TYPE:
+    desc: "Node type to build"
+    "main":
+      default: true
+      overrides:
+        variables:
+          NODE_TYPE: "main"
+
+        components:
+          domd:
+            builder:
+              conf:
+                - [AOS_MAIN_NODE, "1"]
+                - [AOS_HOSTS, "127.0.0.1=wwwivi"]
+                - [AOS_VIS_DATA_PROVIDER, "%{VIS_DATA_PROVIDER}"]
+
+    "secondary":
+      overrides:
+        variables:
+          NODE_TYPE: "secondary"
+
+        components:
+          domd:
+            builder:
+              conf:
+                - [AOS_MAIN_NODE, "0"]
+                - [AOS_HOSTS:append, " %{MAIN_NODE_IP}=%{MAIN_NODE_HOSTNAME}"]
+
+  # Machines
+  MACHINE:
+    desc: "Raspberry Pi machines"
+    rpi5:
+      default: true
+      overrides:
+        variables:
+          MACHINE: "raspberrypi5"
+          SOC_FAMILY: "bcm2712"
+          ZEPHYR_DOM0_MACHINE: "rpi_5"
+
+  DOMD_ROOT:
+    desc: "Domd root device"
+    usb:
+      default: true
+      overrides:
+        variables:
+          DOMD_ROOTFS_DEV: "\\\\/dev\\\\/sda1"
+          VAR_DISK: "\\\\/dev\\\\/sda2"
+          OPEN_DISK: "\\\\/dev\\\\/sda3"
+        components:
+          domd:
+            builder:
+              conf:
+                - [DOMD_OVERLAYS, "%{SOC_FAMILY}-%{MACHINE}-usb.dtbo"]
+                - [MACHINE_FEATURES:append, " domd_usb"]
+
+    nvme:
+      overrides:
+        variables:
+          DOMD_ROOTFS_DEV: "\\\\/dev\\\\/nvme0n1p1"
+          VAR_DISK: "\\\\/dev\\\\/nvme0n1p2"
+          OPEN_DISK: "\\\\/dev\\\\/nvme0n1p3"
+        components:
+          domd:
+            builder:
+              conf:
+                - [DOMD_OVERLAYS, "%{SOC_FAMILY}-%{MACHINE}-pcie1.dtbo"]
+                - [MACHINE_FEATURES:append, " domd_nvme"]
