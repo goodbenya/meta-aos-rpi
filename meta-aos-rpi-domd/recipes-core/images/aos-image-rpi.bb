@@ -42,6 +42,7 @@ IMAGE_INSTALL:append = " \
 
 IMAGE_INSTALL:append = " \
     aos-messageproxy \
+    aos-deprov \
 "
 
 # Set fixed rootfs size
