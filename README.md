@@ -102,7 +102,8 @@ You should have `boot.img` and `rootfs.img` files in the build folder.
 You can build both images inside a Docker container by simply running the following command:
 
 ```sh
-./docker/build.sh
+cd ./docker
+./build.sh
 ```
 
 You can also pass the following arguments:
@@ -119,13 +120,15 @@ You can also pass the following arguments:
 Example command:
 
 ```sh
-./docker/build.sh
+cd ./docker
+./build.sh
 ```
 
 or
 
 ```sh
-./docker/build.sh --ARTIFACTS_DIR=~/aos_artifacts --MACHINE=rpi5 --SELINUX=disabled
+cd ./docker
+./build.sh --ARTIFACTS_DIR=~/aos_artifacts --MACHINE=rpi5 --SELINUX=disabled
 ```
 
 ## Flash images

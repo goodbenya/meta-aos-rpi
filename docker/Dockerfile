@@ -38,7 +38,7 @@ USER user
 
 WORKDIR /meta-aos-rpi
 
-RUN git clone --branch main https://github.com/aosedge/meta-aos-rpi.git /meta-aos-rpi
+RUN git clone --branch buld_ci https://github.com/aosedge/meta-aos-rpi.git /meta-aos-rpi
 RUN pip3 install --user git+https://github.com/xen-troops/moulin 
 RUN pip3 install west google google-api-core pyelftools
 

@@ -76,7 +76,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
     error_and_exit "Container $CONTAINER_NAME failed to start."
 fi
 
-echo "Building boot.img and rootfs.img"
+echo "Building install.img"
 
 CMD="cd /meta-aos-rpi/artifacts &&  moulin ../aos-rpi.yaml"
 [[ -n "$VIS_DATA_PROVIDER" ]] && CMD+=" --VIS_DATA_PROVIDER \"$VIS_DATA_PROVIDER\""
@@ -85,6 +85,7 @@ CMD="cd /meta-aos-rpi/artifacts &&  moulin ../aos-rpi.yaml"
 [[ -n "$DOMD_ROOT" ]] && CMD+=" --DOMD_ROOT \"$DOMD_ROOT\""
 [[ -n "$SELINUX" ]] && CMD+=" --SELINUX \"$SELINUX\""
 CMD+=" && ninja boot.img && ninja rootfs.img"
+#CMD+=" && ninja install.img"
 
 if docker exec -it --user user "$CONTAINER_NAME" bash -c "
     $CMD
