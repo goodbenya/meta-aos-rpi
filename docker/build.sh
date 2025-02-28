@@ -1,7 +1,7 @@
 #!/bin/bash
 
-IMAGE_NAME="meta-aos-rpi"
-CONTAINER_NAME="meta-aos-rpi_container"
+IMAGE_NAME="meta-aos-rpi-new"
+CONTAINER_NAME="meta-aos-rpi_container-new"
 ARTIFACTS_DIR="$(pwd)/artifacts"
 
 # List aos-rpi.yaml parameters.
@@ -71,20 +71,21 @@ fi
 
 echo "Starting new container: $CONTAINER_NAME"
 
-docker run -d -v "$ARTIFACTS_DIR:/meta-aos-rpi/artifacts" --name "$CONTAINER_NAME" "$IMAGE_NAME" tail -f /dev/null
+docker run -d -v "$(realpath ./..):/meta-aos-rpi" -v "$ARTIFACTS_DIR:/tmp/artifacts" --name "$CONTAINER_NAME" "$IMAGE_NAME" tail -f /dev/null
 if ! docker ps --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
     error_and_exit "Container $CONTAINER_NAME failed to start."
 fi
 
-echo "Building boot.img and rootfs.img"
+echo "Building install.img"
 
-CMD="cd /meta-aos-rpi/artifacts &&  moulin ../aos-rpi.yaml"
+CMD="cd /tmp/artifacts &&  moulin /meta-aos-rpi/aos-rpi.yaml"
 [[ -n "$VIS_DATA_PROVIDER" ]] && CMD+=" --VIS_DATA_PROVIDER \"$VIS_DATA_PROVIDER\""
 [[ -n "$DOMD_NODE_TYPE" ]] && CMD+=" --DOMD_NODE_TYPE \"$DOMD_NODE_TYPE\""
 [[ -n "$MACHINE" ]] && CMD+=" --MACHINE \"$MACHINE\""
 [[ -n "$DOMD_ROOT" ]] && CMD+=" --DOMD_ROOT \"$DOMD_ROOT\""
 [[ -n "$SELINUX" ]] && CMD+=" --SELINUX \"$SELINUX\""
-CMD+=" && ninja boot.img && ninja rootfs.img"
+#CMD+=" && ninja boot.img && ninja rootfs.img"
+CMD+=" && ninja install && ninja install.img"
 
 if docker exec -it --user user "$CONTAINER_NAME" bash -c "
     $CMD
