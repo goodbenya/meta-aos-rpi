@@ -34,11 +34,14 @@ RUN mkdir -p /meta-aos-rpi
 RUN chmod -R 755 /meta-aos-rpi
 RUN chown user:user /meta-aos-rpi
 
+RUN mkdir -p /artifacts
+RUN chmod -R 755 /artifacts
+RUN chown user:user /artifacts
+
 USER user
 
 WORKDIR /meta-aos-rpi
 
-RUN git clone --branch main https://github.com/aosedge/meta-aos-rpi.git /meta-aos-rpi
 RUN pip3 install --user git+https://github.com/xen-troops/moulin 
 RUN pip3 install west google google-api-core pyelftools
 
