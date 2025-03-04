@@ -94,6 +94,7 @@ Build rootfs image:
 ```sh
 ninja rootfs.img
 ```
+
 You should have `boot.img` and `rootfs.img` files in the build folder.
 
 ### Build Boot Image and RootFS Image in Docker
@@ -116,10 +117,13 @@ You can also pass the following arguments:
 | `--SELINUX`             | Same value as described in the **Build** section. |NO|
 
 Example command:
+
 ```sh
 ./docker/build.sh
 ```
+
 or
+
 ```sh
 ./docker/build.sh --ARTIFACTS_DIR=~/aos_artifacts --MACHINE=rpi5 --SELINUX=disabled
 ```
@@ -136,7 +140,7 @@ To flash boot image on SD-card run below command:
 sudo dd if=boot.img of=/dev/<sd-dev> bs=4M status=progress conv=sparse
 ```
 
-**NOTE:** Be sure to identify correctly <sd-dev> which is usually `sda`. For SD-card identification
+**NOTE:** Be sure to identify correctly `<sd-dev>` which is usually `sda`. For SD-card identification
 Plug/unplug SD-card and check `/dev/` for devices added/removed.
 
 **NOTE:** Ensure existing SD-card partitions unmounted if auto-mount is enabled.
@@ -150,7 +154,7 @@ To flash USB-flash image run below command:
 sudo dd if=rootfs.img of=/dev/<usb-dev> bs=4M status=progress conv=sparse
 ```
 
-**NOTE:** Be sure to identify correctly <usb-dev> which could look like `sdc`.
+**NOTE:** Be sure to identify correctly `<usb-dev>` which could look like `sdc`.
 For USB-flash identification Plug/unplug USB-flash and check `/dev/` for devices added/removed.
 
 **NOTE:** Ensure existing USB-flash partitions unmounted if auto-mount is enabled.
