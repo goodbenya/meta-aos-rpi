@@ -1,0 +1,40 @@
+{
+    "os_list": [
+        {
+            "name": "AOS",
+            "description": "AOS for Raspberry Pi",
+            "icon": "https://icon.png",
+            "subitems": [
+                {
+                    "name": "AOS",
+                    "description": "Preconfigured AOS image for SD card",
+                    "icon": "https://install-icon.png",
+                    "url": "https://install.img",
+                    "extract_size": {{ .extract_size_sd }},
+                    "extract_sha256": {{ .extract_sha256_sd }} ,
+                    "image_download_size": {{ .image_download_size_sd }},
+                    "release_date": {{ .release_date }},
+                    "init_format": "none"
+                }
+            ]
+        },
+        {
+            "name": "AOS",
+            "description": "AOS for Raspberry Pi",
+            "icon": "https://icon.png",
+            "subitems": [
+                {
+                    "name": "AOS",
+                    "description": "Preconfigured AOS image for NVMe",
+                    "icon": "https://install-icon.png",
+                    "url": "https://install.img",
+                    "extract_size": {{ .extract_size_nvme }},
+                    "extract_sha256": {{ .extract_sha256_nvme }} ,
+                    "image_download_size": {{ .image_download_size_nvme }},
+                    "release_date": {{ .release_date }},
+                    "init_format": "none"
+                }
+            ]
+        }
+    ]
+}

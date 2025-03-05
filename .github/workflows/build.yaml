@@ -1,0 +1,139 @@
+name: Aos rpi build
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: github-arc-x64-bigstorage
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+      if: github.event_name != 'push'
+
+    - name: Set tag name
+      id: tag
+      run: |
+        echo "basename=${test1}"
+        if [[ "${{ github.event_name }}" != "push" ]]; then
+          tag=${tag#"v"}
+        else
+          tag=$(basename "${{ github.ref }}")
+        fi
+        tag=${tag#"v"}
+        echo "tag=${tag}"
+        echo "tag=${tag}" >> $GITHUB_OUTPUT
+    - name: Create Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        tag="${{ steps.tag.outputs.tag }}"
+        (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+        gh  --version
+        gh release create --draft "$tag" --title "Version $tag"
+
+  build:
+    runs-on: github-arc-x64-bigstorage
+    needs: [release]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04 ]
+        name: [ head ]
+    env:
+        LANG: 'en_US.UTF-8'
+        LANGUAGE: 'en_US:en'
+        LC_ALL: 'en_US.UTF-8'
+        BUILD_DIR: './workspace'
+    steps:
+    - name: Clone Aos Rpi
+      uses: actions/checkout@v4
+      with:
+        repository: aosedge/meta-aos-rpi
+
+    - name: Set platform
+      id: platform
+      run: |
+        platform=${{ matrix.os }}
+        echo "platform=$platform" >> $GITHUB_OUTPUT
+
+    # Build
+    - name: apt-get update on Ubuntu
+      if: startsWith(matrix.os, 'ubuntu')
+      run: |
+        (type -p wget >/dev/null || (sudo apt update && sudo apt-get install wget -y)) \
+        && sudo mkdir -p -m 755 /etc/apt/keyrings \
+        && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+        && sudo apt update \
+        && sudo apt install gh -y
+    - run: sudo apt-get install -y apt-utils gawk wget git-core diffstat unzip texinfo gcc-multilib build-essential chrpath socat cpio python2 python3 python3-pip python3-pexpect xz-utils debianutils iputils-ping python3-git python3-jinja2 libegl1-mesa libsdl1.2-dev xterm vim locales rsync devscripts debhelper dkms curl imx-code-signing-tool jq ninja-build zstd liblz4-tool dosfstools mtools qemu-utils ca-certificates repo locales cmake
+      if: startsWith(matrix.os, 'ubuntu')
+      name: apt-get install on Ubuntu
+    # Build
+    - name: Prepare environment
+      run: |
+        sudo locale-gen en_US.UTF-8 \
+        && mkdir -p $BUILD_DIR \
+        && echo "$HOME/.local/bin" >> "$GITHUB_PATH" \
+        && echo "PATH=${PATH}"
+    - name: Build artifacts
+      uses: addnab/docker-run-action@v3
+      with:
+        image: './docker/Dockerfile'
+        run: |
+          cp ./docker/build.sh ./build.sh \
+          && chmod +x ./docker/build.sh \
+          && ./build.sh
+    # - run: pip3 install --user git+https://github.com/xen-troops/moulin
+    #   name: Install moulin
+    # - run: pip3 install --user west
+    #   name: Install west
+    # - run: moulin aos-rpi.yaml
+    #   name: Run moulin
+    # - run: ninja boot.img || ninja boot.img
+    #   name: Build boot image
+    # - run: ninja rootfs.img || ninja rootfs.img
+    #   name: Build rootfs image
+    - name: Generate os_list.json
+      uses: chuhlomin/render-template@v1
+      with:
+          template: docs/os_list.json.template
+          vars: |
+            extract_size_sd: 0
+            extract_sha256_sd: 0
+            image_download_size_sd: 0
+            extract_size_nvme: 0
+            extract_sha256_nvme: 0
+            image_download_size_nvme: 0
+            release_date: "2025-02-27"
+          run: echo '${{ steps.render_template.outputs.result }}' > artifacts/os_list.json
+    - name: Upload Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: gh release upload "${{ needs.release.outputs.tag }}" "artifacts/boot.img artifacts/rootfs.img artifacts/os_list.json"
+    - name: Publish Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: ( [[ ! "${{ needs.release.outputs.tag }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && gh release edit "${{ needs.release.outputs.tag }}" --prerelease || echo "Release" ); gh release edit "${{ needs.release.outputs.tag }}" --draft=false
+
+        
+
